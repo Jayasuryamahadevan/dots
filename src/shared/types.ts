@@ -78,6 +78,7 @@ export interface Dot {
   instructions: string;
   researchAllowed: boolean;
   memoryAllowed: boolean;
+  mcpServerNames: string[];
   createdAt: number;
   learningContainerId?: string | null;
   skillDeliveryEnabled?: boolean;
