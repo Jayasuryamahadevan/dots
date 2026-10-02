@@ -18,6 +18,7 @@ import { Store } from './store.js';
 import { WorkspaceStore } from './workspace.js';
 import type { PlatformConfig } from './platform-config.js';
 import { browserResponse } from './research.js';
+import type { McpManager } from './mcp.js';
 const channelError = () => ({
   type: EventType.RUN_ERROR,
   message:
@@ -32,6 +33,7 @@ export class DotAgent extends AbstractAgent {
     private config: PlatformConfig,
     private dotId: string,
     private channel = false,
+    private mcp?: McpManager,
   ) {
     super({ agentId: dotId });
   }
@@ -42,6 +44,7 @@ export class DotAgent extends AbstractAgent {
       this.config,
       this.dotId,
       this.channel,
+      this.mcp,
     );
   }
   abortRun() {
@@ -93,7 +96,9 @@ export class DotAgent extends AbstractAgent {
             current.skillDeliveryEnabled !== dot.skillDeliveryEnabled ||
             current.researchAllowed !== dot.researchAllowed ||
             current.spaceId !== dot.spaceId ||
-            JSON.stringify(current.spaceIds) !== JSON.stringify(dot.spaceIds)
+            JSON.stringify(current.spaceIds) !== JSON.stringify(dot.spaceIds) ||
+            JSON.stringify(current.mcpServerNames) !==
+              JSON.stringify(dot.mcpServerNames)
           )
             this.abortRun();
           controller.signal.throwIfAborted();
@@ -188,6 +193,11 @@ export class DotAgent extends AbstractAgent {
         const serverTools = [
           ...tools,
           ...pageTools(pages),
+          ...(this.mcp?.toolsFor(
+            dot.mcpServerNames,
+            controller.signal,
+            check,
+          ) ?? []),
           ...(computer.configured
             ? computerTools(computer, dot.id, check, controller.signal)
             : []),
@@ -218,6 +228,7 @@ export class DotAgent extends AbstractAgent {
               messages: converted.messages,
               systemPrompts: [
                 prompt,
+                ...(this.mcp?.instructionsFor(dot.mcpServerNames) ?? []),
                 ...converted.systemPrompts,
                 ...(ctx.learnedSkills.catalog
                   ? [ctx.learnedSkills.catalog]
