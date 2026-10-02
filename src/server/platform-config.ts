@@ -1,4 +1,5 @@
 import type { SetupStatus } from '../shared/types.js';
+import type { McpServerConfig } from './mcp.js';
 export interface PlatformConfig {
   intelligenceKey?: string;
   intelligenceApiUrl?: string;
@@ -21,6 +22,7 @@ export interface PlatformConfig {
   slackDotId?: string;
   runtimeUrl: string;
   ownerToken?: string;
+  mcpServers?: McpServerConfig[];
 }
 export function setupStatus(
   config: PlatformConfig,
