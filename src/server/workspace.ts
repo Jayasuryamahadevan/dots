@@ -22,7 +22,8 @@ export class WorkspaceStore {
       CREATE TABLE IF NOT EXISTS thread_bindings(id TEXT PRIMARY KEY, dotId TEXT NOT NULL, ownerId TEXT NOT NULL, title TEXT NOT NULL, createdAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS task_threads(taskId TEXT PRIMARY KEY, threadId TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS calls(id TEXT PRIMARY KEY, threadId TEXT NOT NULL, startedAt INTEGER NOT NULL, endedAt INTEGER, status TEXT NOT NULL, transcript TEXT NOT NULL, error TEXT);
-      CREATE TABLE IF NOT EXISTS captures(threadId TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS captures(threadId TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS dot_mcp_servers(dotId TEXT NOT NULL, serverName TEXT NOT NULL, PRIMARY KEY(dotId, serverName));`);
     for (const [table, column, definition] of [
       ['dots', 'learningContainerId', 'TEXT'],
       ['dots', 'skillDeliveryEnabled', 'INTEGER NOT NULL DEFAULT 0'],
@@ -106,6 +107,12 @@ export class WorkspaceStore {
           )
           .all(String(row.id))
           .map((grant) => String(grant.spaceId)),
+        mcpServerNames: this.db
+          .prepare(
+            'SELECT serverName FROM dot_mcp_servers WHERE dotId=? ORDER BY serverName',
+          )
+          .all(String(row.id))
+          .map((grant) => String(grant.serverName)),
         researchAllowed: !!row.researchAllowed,
         memoryAllowed: !!row.memoryAllowed,
         skillDeliveryEnabled: !!row.skillDeliveryEnabled,
@@ -123,6 +130,7 @@ export class WorkspaceStore {
     spaceIds: string[] = [spaceId],
     learningContainerId: string | null = null,
     skillDeliveryEnabled = false,
+    mcpServerNames: string[] = [],
   ): Dot {
     this.validateSpaceAccess(spaceId, spaceIds);
     validateLearningSettings(learningContainerId, skillDeliveryEnabled);
@@ -134,6 +142,7 @@ export class WorkspaceStore {
       instructions,
       researchAllowed,
       memoryAllowed,
+      mcpServerNames: [...new Set(mcpServerNames)].sort(),
       learningContainerId,
       skillDeliveryEnabled,
       createdAt: Date.now(),
@@ -157,6 +166,10 @@ export class WorkspaceStore {
         );
       for (const id of dot.spaceIds)
         this.db.prepare('INSERT INTO dot_spaces VALUES (?, ?)').run(dot.id, id);
+      for (const serverName of dot.mcpServerNames)
+        this.db
+          .prepare('INSERT INTO dot_mcp_servers VALUES (?, ?)')
+          .run(dot.id, serverName);
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -186,6 +199,7 @@ export class WorkspaceStore {
       spaceIds?: string[];
       learningContainerId?: string | null;
       skillDeliveryEnabled?: boolean;
+      mcpServerNames?: string[];
     },
   ): Dot {
     const current = this.dot(id);
@@ -199,6 +213,9 @@ export class WorkspaceStore {
         : patch.learningContainerId;
     const skillDeliveryEnabled =
       patch.skillDeliveryEnabled ?? current.skillDeliveryEnabled ?? false;
+    const mcpServerNames = [
+      ...new Set(patch.mcpServerNames ?? current.mcpServerNames),
+    ].sort();
     validateLearningSettings(learningContainerId, skillDeliveryEnabled);
     this.db.exec('BEGIN');
     try {
@@ -221,6 +238,11 @@ export class WorkspaceStore {
       this.db.prepare('DELETE FROM dot_spaces WHERE dotId=?').run(id);
       for (const space of new Set(spaceIds))
         this.db.prepare('INSERT INTO dot_spaces VALUES (?, ?)').run(id, space);
+      this.db.prepare('DELETE FROM dot_mcp_servers WHERE dotId=?').run(id);
+      for (const serverName of mcpServerNames)
+        this.db
+          .prepare('INSERT INTO dot_mcp_servers VALUES (?, ?)')
+          .run(id, serverName);
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
