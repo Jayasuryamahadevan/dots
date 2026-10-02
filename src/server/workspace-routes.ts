@@ -13,6 +13,10 @@ const dotSchema = z
     instructions: z.string().trim().min(3).max(2000),
     researchAllowed: z.boolean(),
     memoryAllowed: z.boolean(),
+    mcpServerNames: z
+      .array(z.string().regex(/^[A-Za-z0-9_-]{1,32}$/))
+      .max(50)
+      .optional(),
     learningContainerId: learningContainerIdSchema.optional(),
     skillDeliveryEnabled: z.boolean().optional(),
     spaceIds: z.array(z.string().min(1)).min(1).max(100).optional(),
@@ -77,6 +81,14 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
         400,
       );
     }
+    try {
+      platform.mcp.validateGrants(data.data.mcpServerNames ?? []);
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Invalid MCP access.' },
+        400,
+      );
+    }
     return c.json(
       platform.workspace.createDot(
         data.data.spaceId,
@@ -87,6 +99,7 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
         data.data.spaceIds,
         data.data.learningContainerId,
         data.data.skillDeliveryEnabled,
+        data.data.mcpServerNames ?? [],
       ),
       201,
     );
@@ -98,6 +111,9 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
     const current = platform.workspace.dot(c.req.param('id'));
     if (!current) return c.json({ error: 'Dot not found.' }, 404);
     try {
+      platform.mcp.validateGrants(
+        data.data.mcpServerNames ?? current.mcpServerNames,
+      );
       validateLearningSettings(
         data.data.learningContainerId === undefined
           ? (current.learningContainerId ?? null)
