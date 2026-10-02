@@ -16,10 +16,12 @@ import { runThreadTurn } from './headless.js';
 import { setupStatus, type PlatformConfig } from './platform-config.js';
 import { validateRuntimeScope } from './runtime-scope.js';
 import { learningSelector } from './learning.js';
+import { McpManager } from './mcp.js';
 export class Platform {
   private channelStartupFailed = false;
   readonly pages: PageService;
   readonly computers: ComputerService;
+  readonly mcp: McpManager;
   readonly intelligence?: CopilotKitIntelligence;
   readonly handler?: CopilotHonoApp;
   constructor(
@@ -27,6 +29,7 @@ export class Platform {
     readonly workspace: WorkspaceStore,
     readonly config: PlatformConfig,
   ) {
+    this.mcp = new McpManager(config.mcpServers ?? []);
     this.computers = new ComputerService(
       workspace,
       config,
@@ -56,7 +59,7 @@ export class Platform {
         config,
         ownerId: workspace.ownerId,
         paused: () => store.settings().paused,
-        agent: () => new DotAgent(store, workspace, config, dotId, true),
+        agent: () => new DotAgent(store, workspace, config, dotId, true, this.mcp),
       });
       channels.push(slack);
     }
@@ -72,7 +75,7 @@ export class Platform {
             .dots()
             .map((dot) => [
               dot.id,
-              new DotAgent(store, workspace, config, dot.id),
+              new DotAgent(store, workspace, config, dot.id, false, this.mcp),
             ]),
         ),
       channels,
@@ -100,6 +103,7 @@ export class Platform {
       );
   }
   async start() {
+    await this.mcp.start();
     if (this.handler?.channels) {
       try {
         await this.handler.channels.ready({ timeoutMs: 15000 });
@@ -112,6 +116,7 @@ export class Platform {
   }
   async stop() {
     await this.handler?.channels?.stop();
+    await this.mcp.stop();
   }
   async createConversation(dotId: string, title: string) {
     this.requireReady();
